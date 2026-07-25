@@ -51,7 +51,7 @@
     YES,                     !- Do Zone Sizing Calculation
     YES,                     !- Do System Sizing Calculation
     YES,                     !- Do Plant Sizing Calculation
-    YES,                     !- Run Simulation for Sizing Periods
+    No,                      !- Run Simulation for Sizing Periods
     YES,                     !- Run Simulation for Weather File Run Periods
     No,                      !- Do HVAC Sizing Simulation for Sizing Periods
     1;                       !- Maximum Number of HVAC Sizing Simulation Passes
@@ -67,12 +67,12 @@
     6;                       !- Minimum Number of Warmup Days
 
   RunPeriod,
-    annual,                  !- Name
-    1,                       !- Begin Month
-    1,                       !- Begin Day of Month
+    Feb5to11,                !- Name
+    2,                       !- Begin Month
+    5,                       !- Begin Day of Month
     ,                        !- Begin Year
-    12,                      !- End Month
-    31,                      !- End Day of Month
+    2,                       !- End Month
+    11,                      !- End Day of Month
     ,                        !- End Year
     Sunday,                  !- Day of Week for Start Day
     No,                      !- Use Weather File Holidays and Special Days

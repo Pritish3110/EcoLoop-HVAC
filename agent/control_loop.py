@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Phase 4: LLM Agent Decision Loop (Closing the Loop)
+Phase 5: Guardrail Hardening & Extended Multi-Day Stress Test
 Executes a live closed-loop control simulation where an LLM (Ollama llama3.1:8b) evaluates
 building telemetry every control interval, reasons about comfort vs energy trade-offs,
 and issues structured tool calls to adjust zone thermostat setpoints.
-All setpoints are strictly filtered through defensive guardrails before reaching EMS actuators.
-Runs for 1 simulated day (72 control intervals) as required for verification.
+All setpoints pass through SetpointGuardrail, which enforces bounds, tracks consecutive rejections,
+and triggers safe default escalation (20.0°C/24.0°C) after 3 consecutive failures.
+Runs for an extended 12-hour stress horizon (36 control intervals = 108 zone decisions) in Phase 5.
 """
 
 import os
@@ -27,7 +28,7 @@ from agent.prompt_builder import generate_prompts
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3.1:8b"
 TIMEOUT_SEC = 45.0
-MAX_INTERVALS = 72  # exactly 1 simulated day (24 hours at 20-min control intervals)
+MAX_INTERVALS = 504  # 7 simulated days (504 control intervals = 1512 zone tool decisions) for Phase 6 robustness verification
 
 def parse_llm_tools(message: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
@@ -125,12 +126,12 @@ def main():
     idf_path = os.path.expanduser("models/actuator_ready.idf")
     log_dir = "logs"
     os.makedirs(log_dir, exist_ok=True)
-    out_csv = os.path.join(log_dir, "phase4_control_log.csv")
+    out_csv = os.path.join(log_dir, "phase6_control_log.csv")
 
-    # Initialize CSV control log
+    # Initialize CSV control log with 'escalated' column
     csv_header = [
         "sim_time", "zone", "requested_heating", "requested_cooling",
-        "applied_heating", "applied_cooling", "guardrail_pass",
+        "applied_heating", "applied_cooling", "guardrail_pass", "escalated",
         "rationale_text", "llm_latency_ms"
     ]
     with open(out_csv, "w", newline="") as f:
@@ -211,9 +212,9 @@ def main():
         if timestep_count % 2 != 0:
             return
 
-        # Stop simulation if we reached the required verification duration (1 simulated day = 72 intervals)
+        # Stop simulation if we reached the required verification duration (36 intervals = 12 simulated hours)
         if control_interval_count >= MAX_INTERVALS:
-            print(f"\n[VERIFICATION COMPLETE] Reached {MAX_INTERVALS} control intervals (1 simulated day). Terminating cleanly.")
+            print(f"\n[VERIFICATION COMPLETE] Reached {MAX_INTERVALS} control intervals (7 simulated days). Terminating cleanly.")
             api.runtime.stop_simulation(state_arg)
             return
 
@@ -271,15 +272,15 @@ def main():
         zones_processed: Set[str] = set()
 
         if err_str != "" or not tool_calls:
-            # LLM Failure or Timeout -> Fallback for all zones
+            # LLM Failure or Timeout -> Record guardrail failure for all zones
             fail_reason = err_str if err_str != "" else "No tool calls returned by LLM"
             print(f"  [LLM ERROR] {fail_reason} (Latency: {latency_ms} ms). Applying fallback setpoints.")
             for zone in target_zones:
-                fb = guardrail.last_known_good[zone]
+                is_val, fb, reason, esc = guardrail.validate_setpoint(zone, None, None)
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone]["htg"], fb["heating"])
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone]["clg"], fb["cooling"])
                 last_feedback[zone] = f"LLM call failed ({fail_reason}); fallback applied."
-                row = [timestamp, zone, "N/A", "N/A", fb["heating"], fb["cooling"], False, f"LLM_ERROR: {fail_reason}", latency_ms]
+                row = [timestamp, zone, "N/A", "N/A", fb["heating"], fb["cooling"], False, esc, f"LLM_ERROR: {fail_reason}", latency_ms]
                 with open(out_csv, "a", newline="") as f:
                     csv.writer(f).writerow(row)
             return
@@ -300,7 +301,7 @@ def main():
             req_clg = args.get("cooling_setpoint_c")
             rationale = str(args.get("rationale", "")).strip().replace("\n", " ")
 
-            is_valid, clean_vals, reason = guardrail.validate_setpoint(zone_id, req_htg, req_clg)
+            is_valid, clean_vals, reason, escalated = guardrail.validate_setpoint(zone_id, req_htg, req_clg)
             zones_processed.add(zone_id)
 
             if is_valid:
@@ -308,14 +309,14 @@ def main():
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone_id]["htg"], clean_vals["heating"])
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone_id]["clg"], clean_vals["cooling"])
                 print(f"  [{zone_id}] PASS -> Htg: {clean_vals['heating']}°C, Clg: {clean_vals['cooling']}°C | {rationale[:60]}...")
-                row = [timestamp, zone_id, req_htg, req_clg, clean_vals["heating"], clean_vals["cooling"], True, rationale, latency_ms]
+                row = [timestamp, zone_id, req_htg, req_clg, clean_vals["heating"], clean_vals["cooling"], True, escalated, rationale, latency_ms]
             else:
-                # Guardrail Rejection -> Apply fallback from clean_vals (last known good)
+                # Guardrail Rejection -> Apply fallback from clean_vals
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone_id]["htg"], clean_vals["heating"])
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone_id]["clg"], clean_vals["cooling"])
                 last_feedback[zone_id] = f"Proposed setpoints (Htg:{req_htg}, Clg:{req_clg}) REJECTED: {reason}"
-                print(f"  [{zone_id}] REJECTED ({reason}) -> Fallback Htg: {clean_vals['heating']}°C, Clg: {clean_vals['cooling']}°C")
-                row = [timestamp, zone_id, req_htg, req_clg, clean_vals["heating"], clean_vals["cooling"], False, f"REJECTED: {reason} | Rationale: {rationale}", latency_ms]
+                print(f"  [{zone_id}] REJECTED ({reason}) -> Fallback Htg: {clean_vals['heating']}°C, Clg: {clean_vals['cooling']}°C (Escalated: {escalated})")
+                row = [timestamp, zone_id, req_htg, req_clg, clean_vals["heating"], clean_vals["cooling"], False, escalated, f"REJECTED: {reason} | Rationale: {rationale}", latency_ms]
 
             with open(out_csv, "a", newline="") as f:
                 csv.writer(f).writerow(row)
@@ -323,21 +324,21 @@ def main():
         # 6. Check for missing zones not addressed by LLM tool calls
         for zone in target_zones:
             if zone not in zones_processed:
-                fb = guardrail.last_known_good[zone]
+                is_val, fb, reason, esc = guardrail.validate_setpoint(zone, None, None)
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone]["htg"], fb["heating"])
                 api.exchange.set_actuator_value(state_arg, actuator_handles[zone]["clg"], fb["cooling"])
                 last_feedback[zone] = "LLM omitted tool call for this zone; fallback applied."
-                print(f"  [{zone}] MISSING TOOL CALL -> Fallback Htg: {fb['heating']}°C, Clg: {fb['cooling']}°C")
-                row = [timestamp, zone, "MISSING", "MISSING", fb["heating"], fb["cooling"], False, "MISSING_ZONE_TOOL_CALL", latency_ms]
+                print(f"  [{zone}] MISSING TOOL CALL -> Fallback Htg: {fb['heating']}°C, Clg: {fb['cooling']}°C (Escalated: {esc})")
+                row = [timestamp, zone, "MISSING", "MISSING", fb["heating"], fb["cooling"], False, esc, "MISSING_ZONE_TOOL_CALL", latency_ms]
                 with open(out_csv, "a", newline="") as f:
                     csv.writer(f).writerow(row)
 
     api.runtime.callback_begin_system_timestep_before_predictor(state, timestep_callback)
 
     print("==========================================================")
-    print("Starting Phase 4 LLM Agent Closed-Loop Control Verification (1 Day)...")
+    print("Starting Phase 6 LLM Agent Multi-Day Robustness Test (7 Days)...")
     print(f"Model: {MODEL_NAME} at {OLLAMA_URL}")
-    print(f"Target Cadence: {MAX_INTERVALS} control intervals (24 simulated hours)")
+    print(f"Target Cadence: {MAX_INTERVALS} control intervals (7 simulated days)")
     print("==========================================================")
 
     os.makedirs("models/actuator_out", exist_ok=True)
@@ -345,7 +346,7 @@ def main():
     exit_code = api.runtime.run_energyplus(state, cmd_args)
 
     print("\n==========================================================")
-    print("--- Phase 4 Closed-Loop Simulation Summary ---")
+    print("--- Phase 6 Closed-Loop Simulation Summary ---")
     print(f"Exit Code:              {exit_code}")
     print(f"Total Control Intervals: {control_interval_count}")
     print(f"Log File:               {out_csv}")

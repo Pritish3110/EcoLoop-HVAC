@@ -1,93 +1,109 @@
-PHASE 4 — LLM AGENT DECISION LOOP (CLOSING THE LOOP)
+PHASE 6 — MULTI-DAY UNATTENDED ROBUSTNESS RUN & PROJECT DOCUMENTATION
 Project: Eco-Loop Building Agents (Honeywell hackathon closed-loop EnergyPlus + LLM control)
 
 CONTEXT — CARRY THESE FORWARD EXACTLY
-- EnergyPlus v26.1.0, actuator_ready.idf (3 target zones: Core_mid, Perimeter_bot_ZN_1,
-  Perimeter_top_ZN_1), 6 EMS actuators on Schedule:Constant objects, all handles verified valid
-- agent/state_schema.py — BuildingState, ZoneReading, RollingStats, RollingWindowTracker (N=4
-  control intervals), already verified producing clean data at the established control cadence
-  (72 intervals/day per Phase 3's trace)
-- logs/baseline_kpis.json — GOLDEN, IMMUTABLE. Facility Elec 767,958.33 kWh, Gas 60,361.11 kWh,
-  Peak Demand 344.93 kW. Do not regenerate. This is the number to beat.
-- Ollama: llama3.1:8b running locally, GPU-offloaded, ~2.14s per call verified in Phase 1
-- Comfort proxy: operative temperature 20–24°C (established in Phase 3, not PMV — check
-  BUILDING_NOTES.md for exact rationale if unsure)
-- Venv: /home/pritish_3110/Personal Files/Syllabus/Projects/honeywell_hackathon/.venv
+- Phase 5 result: 12-hr run, 108/108 guardrail passes, 0 escalations, 0 crashes, latency
+  stable 20.67s-41.22s avg 27.85s. Self-correction and outage recovery both proven.
+- logs/baseline_kpis.json — golden, immutable: Facility Elec 767,958.33 kWh, Gas 60,361.11 kWh,
+  Peak Demand 344.93 kW
+- agent/control_loop.py, guardrails.py, prompt_builder.py, state_schema.py, tools.py — all
+  verified stable through Phase 5
+- Venv: /home/pritish_3110/Personal Files/Syllabus/Projects/honeywell_hackathon/.venv,
+  Python 3.14.4
+- EnergyPlus v26.1.0 at /home/pritish_3110/.local/EnergyPlus-26-1-0
+- Weather: USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw
 
 GOAL OF THIS PHASE
-Replace the Phase 2 hardcoded override rule with a real LLM decision at every control interval:
-BuildingState → LLM (via tool-calling) → validated setpoint → EMS actuator. This is the actual
-closed loop the hackathon is scoring. Keep it defensive — a single bad LLM call must never crash
-the simulation or leave a zone in an unsafe state.
+Two deliverables, do both:
+(A) Run the full closed-loop system unattended for a genuinely extended horizon (multi-day,
+    ideally covering a full week including a weather swing) to produce the final robustness
+    evidence for the 30%-weighted System Integration score, and the final AI-run KPI numbers
+    to compare against the golden baseline.
+(B) Write the complete GitHub-facing documentation set — README.md and REQUIREMENTS.md — written
+    so a judge or a new developer can understand and reproduce the project from zero context.
 
 STEP-BY-STEP INSTRUCTIONS
 
-1. Define the tool schema — agent/tools.py
-   - One tool: `set_zone_setpoint(zone_id: str, heating_setpoint_c: float, cooling_setpoint_c: float, rationale: str)`
-   - `rationale` is REQUIRED in the schema (short string) — this is what makes Agentic Autonomy
-     scoring visible later and gives you the reasoning trail for the architecture doc.
-   - Hard bounds baked into the schema description (not just enforced later): heating 18–22°C,
-     cooling 23–27°C, heating_setpoint_c must always be < cooling_setpoint_c. Tell the LLM these
-     bounds explicitly in the tool description text.
+1. Configure and launch the extended run
+   - Set actuator_ready.idf's RunPeriod to cover at least 7 simulated days, ideally chosen from
+     the TMY3 weather file to include both a cold stretch and a milder stretch (check the epw
+     for temperature range across the year if unsure which week to pick, document your choice).
+   - Launch via `./.venv/bin/python -m agent.control_loop`, backgrounded (nohup or equivalent)
+     so it survives terminal disconnection, logging stdout to `logs/phase6_run.log`.
+   - Let it run to completion unattended. Do not manually intervene unless it hangs — if it
+     hangs, that itself is the most important finding to report.
 
-2. Build the guardrail/bounds validator — agent/guardrails.py
-   - `validate_setpoint(zone_id, heating, cooling) -> (bool, cleaned_values, reason)`
-   - Enforce: 18 ≤ heating ≤ 22, 23 ≤ cooling ≤ 27, heating < cooling, zone_id is one of the 3
-     valid target zones.
-   - If invalid: DO NOT apply. Return the reason. The control loop must fall back to the last
-     known-good setpoint for that zone (persist last-good values in memory, seeded from the
-     zone's original schedule value at sim start).
-   - This is the single most important file for your System Integration score — no LLM output
-     reaches an actuator without passing through this first.
+2. Extract final AI-run KPIs
+   - From the completed run's eplusout.sql, extract the same fields as baseline_kpis.json
+     (total facility electricity, gas, peak demand) plus total control intervals executed,
+     total guardrail rejections, total escalations, and comfort-violation hours (using the
+     same operative-temp proxy as Phase 3).
+   - Save to `logs/ai_run_kpis.json`.
+   - Compute and save `logs/final_comparison.json`: % electricity change, % gas change, % peak
+     demand change, comfort violation hours (AI run) vs baseline, all relative to
+     baseline_kpis.json. This is your actual scored result — get the arithmetic right and
+     double check the sign (negative = savings).
 
-3. Build the prompt builder — agent/prompt_builder.py
-   - Input: a BuildingState instance (current + rolling window from RollingWindowTracker)
-   - Output: a compact system+user prompt, NOT a raw dump of all fields — summarize the rolling
-     window as already-computed min/max/avg (it already is, per Phase 3 schema), state the
-     current outdoor temp, current per-zone temps, and current energy rate.
-   - Explicitly instruct the LLM in the system prompt: "You control heating/cooling setpoints
-     for 3 zones. Minimize energy use while keeping zone operative temperature between 20–24°C.
-     You MUST call set_zone_setpoint for each zone every time you respond, with a rationale."
-   - If the previous interval had a guardrail rejection or comfort violation, include that as
-     context ("last interval, Zone X setpoint was rejected because Y" / "Zone X was outside
-     comfort range last interval") — this is your self-correction loop.
+3. Update agent/PHASE6_NOTES.md
+   - Run duration (sim days), total control intervals, total guardrail rejections/escalations,
+     latency stats across the full run (avg/min/max, and whether it drifted vs Phase 5's 12-hr
+     numbers), any hangs or anomalies observed, and the final comparison numbers from step 2.
 
-4. Build the control loop manager — agent/control_loop.py
-   - Wraps the EnergyPlusAPI callback pattern from Phases 1–3.
-   - At each control interval (same cadence as Phase 3's state pipeline, NOT every timestep):
-     a. Build BuildingState (reuse Phase 3 pipeline code, don't duplicate it)
-     b. Build prompt via prompt_builder
-     c. Call Ollama with the tool schema, with a hard timeout (e.g. 10s — if it exceeds this,
-        treat as failure, do not block the simulation indefinitely)
-     d. Parse tool calls for all 3 zones. If the LLM didn't call the tool for a zone, or the
-        response isn't parseable JSON, treat as failure for that zone.
-     e. Run every result through guardrails.validate_setpoint
-     f. Apply validated setpoints via set_actuator_value; on any failure/rejection, apply last
-        known-good value instead and log why
-     g. Log EVERY interval to `logs/phase4_control_log.csv`: sim_time, zone, requested_heating,
-        requested_cooling, applied_heating, applied_cooling, guardrail_pass (bool),
-        rationale_text, llm_latency_ms
+4. Write README.md (project root) — must include, in this order:
+   a. Project title + one-paragraph summary of what it does and why (closed-loop LLM control
+      of EnergyPlus building simulation for energy savings with comfort constraints) — written
+      for a judge with zero prior context, not just for a developer.
+   b. Architecture diagram or clearly described data flow: EnergyPlus → state pipeline → prompt
+      builder → LLM (Ollama) → guardrails → actuators → back to EnergyPlus. Reference the actual
+      module names (agent/state_schema.py, agent/guardrails.py, etc.) so a reader can map the
+      description to the repo.
+   c. Project folder structure — a full tree of the actual repo (models/, agent/, logs/, tests/,
+      the SETUP_LOG.md and NOTES files) with a one-line description of what each directory/file
+      contains. Generate this from the actual current directory structure, don't guess it.
+   d. Key results section: baseline vs AI-run KPI comparison table (from final_comparison.json),
+      stated plainly (e.g. "X% electricity reduction, Y% gas reduction, comfort maintained
+      within Z hours of violation") — this is the first thing a judge will look for.
+   e. "First-Time Setup" section — from a fresh clone, exact ordered commands to: create the
+      venv, install all Python dependencies, install EnergyPlus (or a note that a working
+      EnergyPlus install path must be supplied — since EnergyPlus itself isn't a pip package),
+      configure the .pth file for pyenergyplus, install Ollama, pull the required model.
+      Reference REQUIREMENTS.md for the exhaustive dependency list rather than duplicating it.
+   f. "Running the Project" section, split clearly into:
+      - First-time / full pipeline run: baseline generation → state pipeline verification →
+        full control loop run → KPI comparison, with the actual exact commands used in this
+        project (pull real command strings from SETUP_LOG.md, don't invent new ones)
+      - Subsequent / repeat runs: the shorter path once the environment already exists (e.g.
+        just activating venv + running control_loop.py, without re-running baseline extraction)
+   g. Known limitations section — briefly and honestly note things like: control interval
+      granularity, 3-zone scope rather than full-building, single-model LLM choice, latency
+      characteristics — a few honest lines score better with judges than overclaiming.
+   h. Team/attribution line — your name (Pritish, Miraiminds background optional), hackathon
+      name.
 
-5. Run a short verification run first
-   - Run for 1 simulated day only first (fast iteration). Confirm:
-     - No crash
-     - control_log.csv shows a mix of LLM decisions being applied
-     - At least manually inspect 5–10 rationale strings to confirm they're coherent, not garbage
-   - Only proceed to a longer run once this looks sane — do not jump straight to a long run.
-
-6. Update BUILDING_NOTES.md / create agent/PHASE4_NOTES.md
-   - Control interval cadence used and why
-   - Guardrail bounds and fallback behavior
-   - Sample of 3–5 rationale strings from the log, as evidence the reasoning loop works
-   - Any LLM timeout/failure rate observed in the 1-day test run
+5. Write REQUIREMENTS.md (project root) — must include:
+   a. OS/hardware assumptions actually used in this project: Ubuntu 26.04 LTS, NVIDIA GPU
+      (state the RTX 3060 Mobile as what was tested on, and that a GPU is recommended but not
+      strictly required — CPU inference would just be slower, note the latency implication).
+   b. EnergyPlus: exact version (v26.1.0-6f2e40d102), where to download it (official GitHub
+      releases), and that its install path must be reflected wherever the project's .pth file
+      or PYTHONPATH config points — reference the actual mechanism used.
+   c. Python version used (3.14.4) and exact venv creation commands.
+   d. A complete, pinned `requirements.txt`-equivalent list — actually run
+      `./.venv/bin/pip freeze` and include the real output, don't hand-write approximate package
+      names/versions.
+   e. Ollama: install method, exact model pulled (llama3.1:8b) and the exact `ollama pull`
+      command, and confirmation of the GPU offload check command (`ollama ps`).
+   f. Any other non-pip system packages required (build-essential, cmake, python3-venv, etc. —
+      whatever was actually installed in Phase 1, pull from SETUP_LOG.md rather than guessing).
 
 STOP CONDITIONS — report back rather than improvising past these:
-- Simulation crashes or hangs waiting on an LLM call
-- Guardrail validator lets an out-of-bounds setpoint through (this must never happen — treat
-  as a critical bug, not a minor issue)
-- LLM tool call fails to parse for the majority of intervals (indicates prompt/schema problem,
-  not a hardware issue — do not just retry blindly, inspect actual raw LLM output)
+- The extended run hangs or crashes at any point (report exactly where and any error output)
+- final_comparison.json shows an INCREASE in both energy and comfort violations (i.e. the AI
+  strictly underperforms baseline on both fronts) — this would need investigation before
+  packaging it as a result
+- pip freeze output is inconsistent with what's actually importable (indicates a broken venv
+  state that needs fixing before documenting it as reproducible)
 
-Do NOT run the full extended simulation in this phase — that's Phase 6 (robustness). This phase
-only proves the loop works correctly for a short run. Phase 5 hardens guardrails/self-correction
-further if needed; Phase 6 is the long unattended run.
+Do not build the visual dashboard in this phase — that's Phase 7, along with the architecture
+document (distinct from README.md — Phase 7's system architecture doc covers prompt engineering
+strategy and latency management in deliverable-spec detail) and the demo video/slides.

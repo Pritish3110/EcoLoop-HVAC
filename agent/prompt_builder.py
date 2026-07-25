@@ -29,7 +29,7 @@ def generate_prompts(
         "- heating_setpoint_c MUST be strictly between 18.0°C and 22.0°C.\n"
         "- cooling_setpoint_c MUST be strictly between 23.0°C and 27.0°C.\n"
         "- heating_setpoint_c MUST be strictly less than cooling_setpoint_c (at least 1.0°C deadband).\n"
-        "- Always provide a concise technical rationale in each tool call explaining how your decision balances energy saving and comfort.\n"
+        "- Always provide a very brief (under 10 words) technical rationale in each tool call.\n"
         "- Invoke the tool function directly. Do NOT output markdown, conversational filler, or textual explanations outside of tool calls."
     )
 
