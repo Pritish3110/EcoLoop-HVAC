@@ -47,5 +47,31 @@
 
 ---
 
-## 6. Next Steps (Phase 3 Readiness)
-All Phase 2 stop conditions (valid actuator handles, setpoint override persistence, and measurable energy delta) have been met and documented in `models/BUILDING_NOTES.md`. The environment and actuator infrastructure are verified and ready for Phase 3 (State monitoring, KPI establishment, and closed-loop data pipeline preparation).
+## 6. Phase 3 Verification Matrix (Baseline KPI & State Pipeline)
+
+| Step | Verification Command | Status | Note |
+| :--- | :--- | :---: | :--- |
+| **Step 1: Baseline KPI Extraction** | `./.venv/bin/python extract_baseline_kpis.py` | **PASS** | Programmatically extracted baseline KPIs from SQLite `eplusout.sql`; generated immutable golden record at `logs/baseline_kpis.json` with Facility Elec (767,958.33 kWh), Gas (60,361.11 kWh), and Peak Demand (344.93 kW). |
+| **Step 2: BuildingState Contract** | Defined in `agent/state_schema.py` | **PASS** | Created `ZoneReading`, `RollingStats`, `BuildingState`, and `RollingWindowTracker` ($N=4$ control intervals) to manage telemetry statistical summaries and reduce token overhead. |
+| **Step 3: State Pipeline Verification** | `./.venv/bin/python test_state_pipeline.py` | **PASS** | Verified sensor/meter handle acquisition and dynamic re-attempting; streamed 26,568 JSON snapshots across 53,136 timesteps to `logs/phase3_state_stream.log` with zero invalid handles, zero nulls/NaNs, and sane statistical bounds ($min \le avg \le max$). |
+| **Step 4: Sample State Trace Export** | Generated during `test_state_pipeline.py` | **PASS** | Saved 1 full simulated day (first 72 control intervals representing 24 hours of runtime) in tabular CSV format to `logs/phase3_state_trace.csv` as the canonical reference format for Phase 4 prompt builders. |
+| **Step 5: Documentation Update** | Appended to `models/BUILDING_NOTES.md` | **PASS** | Documented ground-truth KPIs, operative temperature comfort proxy rationale (vs PMV), and confirmed clean 24-hour runtime execution. |
+
+## 7. Phase 4 Verification Matrix (LLM Agent Decision Loop & Guardrails)
+
+| Step | Verification Command / Component | Status | Note |
+| :--- | :--- | :---: | :--- |
+| **Step 1: Tool Schema Definition** | Defined in `agent/tools.py` | **PASS** | Created `set_zone_setpoint` OpenAI/Ollama tool schema with hard operational bounds ($18\le T_{\text{heat}}\le 22$, $23\le T_{\text{cool}}\le 27$, deadband $\ge 1.0^\circ\text{C}$) and mandatory rationale field. |
+| **Step 2: Guardrail Validator** | Defined in `agent/guardrails.py` | **PASS** | Implemented `SetpointGuardrail.validate_setpoint` enforcing bounds and logical ordering; maintains last known-good setpoints in memory seeded from schedule baseline ($21.0^\circ\text{C}/24.0^\circ\text{C}$). |
+| **Step 3: Prompt Builder** | Defined in `agent/prompt_builder.py` | **PASS** | Formatted `BuildingState` (instantaneous telemetry + $N=4$ rolling stats) and previous interval error/rejection feedback into token-efficient system and user prompts. |
+| **Step 4: Control Loop Execution** | `./.venv/bin/python -m agent.control_loop` | **PASS** | Wrapped pyenergyplus runtime, integrated Ollama `llama3.1:8b` via dual-mode JSON tool-call parser (API `tool_calls` + content code blocks) with a 45s timeout; logged decisions to `logs/phase4_control_log.csv`. |
+| **Step 5: Verification Run** | Verified via `logs/phase4_control_log.csv` | **PASS** | Executed multi-hour continuous simulation; confirmed 0 crashes, 0 LLM parsing errors, 100% guardrail compliance (33/33 valid calls), and coherent physical reasoning strings. |
+| **Step 6: Documentation** | Created `agent/PHASE4_NOTES.md` | **PASS** | Documented control interval cadence (20 min), guardrail architecture, empirical latency analytics (~26.3s per turn), and sample reasoning strings. |
+
+---
+
+## 8. Next Steps (Phase 5 Readiness)
+All Phase 4 requirements have been implemented, verified, and documented in `agent/PHASE4_NOTES.md` and `models/BUILDING_NOTES.md`. The AI decision loop is fully operational, stable, and protected by defensive guardrails. The environment is verified and ready for **Phase 5: Self-Correction & Guardrail Hardening**.
+
+
+

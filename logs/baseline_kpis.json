@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "model": "models/baseline.idf",
+    "run_period": "Annual (Jan 1 - Dec 31)",
+    "comfort_proxy": "Zone Mean Air Temperature outside 20.0-24.0 C during occupied hours (08:00-18:00)"
+  },
+  "total_facility_electricity_kwh": 767958.33,
+  "total_facility_natural_gas_kwh": 60361.11,
+  "peak_electrical_demand_kw": 344.93,
+  "comfort_exceedance_hours_occupied": {
+    "Core_mid": 254,
+    "Perimeter_bot_ZN_1": 482,
+    "Perimeter_top_ZN_1": 549
+  }
+}

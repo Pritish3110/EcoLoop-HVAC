@@ -1,84 +1,93 @@
-PHASE 2 — EMS ACTUATOR WIRING & MANUAL OVERRIDE VERIFICATION
+PHASE 4 — LLM AGENT DECISION LOOP (CLOSING THE LOOP)
 Project: Eco-Loop Building Agents (Honeywell hackathon closed-loop EnergyPlus + LLM control)
 
-CONTEXT — CARRY THESE EXACT PATHS FORWARD, DO NOT RE-DISCOVER THEM
-- EnergyPlus: v26.1.0-6f2e40d102, installed at /home/pritish_3110/.local/EnergyPlus-26-1-0
-- CLI binary: /home/pritish_3110/.local/bin/energyplus
-- Base building: /home/pritish_3110/.local/EnergyPlus-26-1-0/ExampleFiles/RefBldgMediumOfficeNew2004_Chicago.idf
-- Weather file: /home/pritish_3110/.local/EnergyPlus-26-1-0/WeatherData/USA_IL_Chicago-OHare.Intl.AP.725300_TMY3.epw
-- Project venv: /home/pritish_3110/Personal Files/Syllabus/Projects/honeywell_hackathon/.venv (Python 3.14.4)
-- pyenergyplus already importable via the .pth file already configured — do not touch that setup.
-- Phase 1 confirmed callback_begin_system_timestep_before_predictor fires correctly (576 calls/day run).
+CONTEXT — CARRY THESE FORWARD EXACTLY
+- EnergyPlus v26.1.0, actuator_ready.idf (3 target zones: Core_mid, Perimeter_bot_ZN_1,
+  Perimeter_top_ZN_1), 6 EMS actuators on Schedule:Constant objects, all handles verified valid
+- agent/state_schema.py — BuildingState, ZoneReading, RollingStats, RollingWindowTracker (N=4
+  control intervals), already verified producing clean data at the established control cadence
+  (72 intervals/day per Phase 3's trace)
+- logs/baseline_kpis.json — GOLDEN, IMMUTABLE. Facility Elec 767,958.33 kWh, Gas 60,361.11 kWh,
+  Peak Demand 344.93 kW. Do not regenerate. This is the number to beat.
+- Ollama: llama3.1:8b running locally, GPU-offloaded, ~2.14s per call verified in Phase 1
+- Comfort proxy: operative temperature 20–24°C (established in Phase 3, not PMV — check
+  BUILDING_NOTES.md for exact rationale if unsure)
+- Venv: /home/pritish_3110/Personal Files/Syllabus/Projects/honeywell_hackathon/.venv
 
 GOAL OF THIS PHASE
-Prove that a Python-driven actuator override can change this specific building's heating/cooling
-setpoints at runtime, and that doing so measurably changes energy consumption in the output —
-BEFORE any LLM is involved. This is the highest-risk phase in the whole project: if actuator
-control doesn't provably work here, the entire closed loop is impossible. Isolate this from LLM
-complexity entirely.
+Replace the Phase 2 hardcoded override rule with a real LLM decision at every control interval:
+BuildingState → LLM (via tool-calling) → validated setpoint → EMS actuator. This is the actual
+closed loop the hackathon is scoring. Keep it defensive — a single bad LLM call must never crash
+the simulation or leave a zone in an unsafe state.
 
 STEP-BY-STEP INSTRUCTIONS
 
-1. Copy the base IDF, don't modify the original
-   - Copy RefBldgMediumOfficeNew2004_Chicago.idf into the project directory as
-     `models/baseline.idf`. Never edit the original ExampleFiles copy.
+1. Define the tool schema — agent/tools.py
+   - One tool: `set_zone_setpoint(zone_id: str, heating_setpoint_c: float, cooling_setpoint_c: float, rationale: str)`
+   - `rationale` is REQUIRED in the schema (short string) — this is what makes Agentic Autonomy
+     scoring visible later and gives you the reasoning trail for the architecture doc.
+   - Hard bounds baked into the schema description (not just enforced later): heating 18–22°C,
+     cooling 23–27°C, heating_setpoint_c must always be < cooling_setpoint_c. Tell the LLM these
+     bounds explicitly in the tool description text.
 
-2. Inspect the IDF's existing thermostat control objects
-   - Open baseline.idf and identify how zone thermostats are currently controlled — look for
-     `ThermostatSetpoint:DualSetpoint`, `ZoneControl:Thermostat`, and the `Schedule:Compact` (or
-     `Schedule:Constant`) objects driving heating/cooling setpoint schedules.
-   - Document in a new `models/BUILDING_NOTES.md`: how many zones exist, which schedule objects
-     drive heating/cooling setpoints, and their current setpoint values/ranges.
+2. Build the guardrail/bounds validator — agent/guardrails.py
+   - `validate_setpoint(zone_id, heating, cooling) -> (bool, cleaned_values, reason)`
+   - Enforce: 18 ≤ heating ≤ 22, 23 ≤ cooling ≤ 27, heating < cooling, zone_id is one of the 3
+     valid target zones.
+   - If invalid: DO NOT apply. Return the reason. The control loop must fall back to the last
+     known-good setpoint for that zone (persist last-good values in memory, seeded from the
+     zone's original schedule value at sim start).
+   - This is the single most important file for your System Integration score — no LLM output
+     reaches an actuator without passing through this first.
 
-3. Add EMS actuator hooks
-   - In baseline.idf, for at least 2–3 representative zones (not all — pick a mix of perimeter
-     and core zones so results are meaningful, e.g. one perimeter office zone + the core zone),
-     add `EnergyManagementSystem:Actuator` objects targeting the heating and cooling setpoint
-     schedules for those zones (actuator type: Schedule Value, on the relevant
-     Schedule:Compact/Constant objects identified in step 2).
-   - If the existing setpoint schedules are `Schedule:Compact` (which can't be EMS-actuated
-     directly in older EnergyPlus versions), replace those specific zones' setpoint schedules
-     with `Schedule:Constant` objects first, then actuate those — check what's required for the
-     installed v26.1.0 and document which approach was needed in BUILDING_NOTES.md.
-   - Save this modified file as `models/actuator_ready.idf`.
+3. Build the prompt builder — agent/prompt_builder.py
+   - Input: a BuildingState instance (current + rolling window from RollingWindowTracker)
+   - Output: a compact system+user prompt, NOT a raw dump of all fields — summarize the rolling
+     window as already-computed min/max/avg (it already is, per Phase 3 schema), state the
+     current outdoor temp, current per-zone temps, and current energy rate.
+   - Explicitly instruct the LLM in the system prompt: "You control heating/cooling setpoints
+     for 3 zones. Minimize energy use while keeping zone operative temperature between 20–24°C.
+     You MUST call set_zone_setpoint for each zone every time you respond, with a rationale."
+   - If the previous interval had a guardrail rejection or comfort violation, include that as
+     context ("last interval, Zone X setpoint was rejected because Y" / "Zone X was outside
+     comfort range last interval") — this is your self-correction loop.
 
-4. Write test_actuator_control.py
-   - Using the EnergyPlusAPI (same pattern verified in Phase 1's test_api.py), write a script
-     that runs actuator_ready.idf against the same weather file, and inside the timestep
-     callback:
-     a. Gets the actuator handles for the heating/cooling setpoints on the target zones
-        (via api.exchange.get_actuator_handle — confirm handles are non-negative/valid before
-        proceeding, and hard-fail with a clear message if any handle is invalid).
-     b. On a simple hardcoded rule (NOT an LLM yet) — e.g. "if outdoor air temp > 25°C, raise
-        cooling setpoint by 2°C in the core zone" — calls set_actuator_value to override the
-        setpoint.
-     c. Logs every override event (sim time, zone, old value, new value) to a CSV
-        `logs/phase2_actuator_events.csv`.
-   - Run this end to end. Confirm:
-     - No crash, full simulation completes
-     - The CSV shows override events actually happened
-     - Reading back the zone's setpoint via get_variable_value after the override reflects the
-       new value, not the original schedule value
+4. Build the control loop manager — agent/control_loop.py
+   - Wraps the EnergyPlusAPI callback pattern from Phases 1–3.
+   - At each control interval (same cadence as Phase 3's state pipeline, NOT every timestep):
+     a. Build BuildingState (reuse Phase 3 pipeline code, don't duplicate it)
+     b. Build prompt via prompt_builder
+     c. Call Ollama with the tool schema, with a hard timeout (e.g. 10s — if it exceeds this,
+        treat as failure, do not block the simulation indefinitely)
+     d. Parse tool calls for all 3 zones. If the LLM didn't call the tool for a zone, or the
+        response isn't parseable JSON, treat as failure for that zone.
+     e. Run every result through guardrails.validate_setpoint
+     f. Apply validated setpoints via set_actuator_value; on any failure/rejection, apply last
+        known-good value instead and log why
+     g. Log EVERY interval to `logs/phase4_control_log.csv`: sim_time, zone, requested_heating,
+        requested_cooling, applied_heating, applied_cooling, guardrail_pass (bool),
+        rationale_text, llm_latency_ms
 
-5. Prove it actually changes energy use
-   - Run baseline.idf (unmodified, step 1 copy, no actuator overrides) through the plain
-     EnergyPlus CLI and extract total facility energy from eplusout.sql.
-   - Run actuator_ready.idf with the hardcoded override rule from step 4 the same way.
-   - Compare total facility kWh between the two runs. They must differ — if the numbers are
-     identical, the actuator override did nothing and this phase has NOT succeeded; debug
-     before proceeding, do not move to Phase 3.
+5. Run a short verification run first
+   - Run for 1 simulated day only first (fast iteration). Confirm:
+     - No crash
+     - control_log.csv shows a mix of LLM decisions being applied
+     - At least manually inspect 5–10 rationale strings to confirm they're coherent, not garbage
+   - Only proceed to a longer run once this looks sane — do not jump straight to a long run.
 
-6. Update BUILDING_NOTES.md with final results
-   - Zone list and which zones got EMS actuators
-   - Actuator handle names/types used
-   - Baseline kWh vs override-run kWh, and the % difference
-   - Any EnergyPlus v26.1 quirks encountered (e.g. Schedule:Compact vs Schedule:Constant issue)
+6. Update BUILDING_NOTES.md / create agent/PHASE4_NOTES.md
+   - Control interval cadence used and why
+   - Guardrail bounds and fallback behavior
+   - Sample of 3–5 rationale strings from the log, as evidence the reasoning loop works
+   - Any LLM timeout/failure rate observed in the 1-day test run
 
 STOP CONDITIONS — report back rather than improvising past these:
-- Any actuator handle comes back invalid (-1 or equivalent)
-- Setpoint override doesn't persist / gets overwritten each timestep by the original schedule
-- Baseline and override-run energy totals are identical
+- Simulation crashes or hangs waiting on an LLM call
+- Guardrail validator lets an out-of-bounds setpoint through (this must never happen — treat
+  as a critical bug, not a minor issue)
+- LLM tool call fails to parse for the majority of intervals (indicates prompt/schema problem,
+  not a hardware issue — do not just retry blindly, inspect actual raw LLM output)
 
-Do not integrate the LLM or Ollama in this phase. This phase proves manual, deterministic
-actuator control works — Phase 3 establishes the real baseline KPIs, Phase 4 replaces the
-hardcoded rule with the LLM decision.
+Do NOT run the full extended simulation in this phase — that's Phase 6 (robustness). This phase
+only proves the loop works correctly for a short run. Phase 5 hardens guardrails/self-correction
+further if needed; Phase 6 is the long unattended run.
