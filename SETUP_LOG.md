@@ -36,7 +36,16 @@
 | **Step 4: Python API Control** | `./.venv/bin/python test_api.py` | **PASS** | Programmatically instantiated `EnergyPlusAPI`, registered `callback_begin_system_timestep_before_predictor`, fired 576 timestep callbacks, exit code 0. |
 | **Step 5: LLM Tool Calling** | `./.venv/bin/python test_llm_tools.py && ollama ps` | **PASS** | Evaluated tool schema via REST API; model returned valid JSON tool call `set_temperature(zone="Conference_Room_1", value=21.5)` with 73% GPU layer offloading. |
 
+## 5. Phase 2 Verification Matrix (EMS Actuator Wiring & Control)
+
+| Step | Verification Command | Status | Note |
+| :--- | :--- | :---: | :--- |
+| **Step 1 & 2: Base Model Isolation & Inspection** | Created `models/baseline.idf` & `models/BUILDING_NOTES.md` | **PASS** | Documented 15-zone topology, shared Compact schedules, and set up isolated baseline IDF with weather file run periods enabled. |
+| **Step 3: Actuator Hooks (`actuator_ready.idf`)** | Decoupled schedules for `Core_mid`, `Perimeter_bot_ZN_1`, `Perimeter_top_ZN_1` | **PASS** | Replaced shared Compact schedules with 6 dedicated `Schedule:Constant` objects and attached 6 `EnergyManagementSystem:Actuator` hooks targeting `"Schedule Value"`. |
+| **Step 4: Python Override Script** | `./.venv/bin/python test_actuator_control.py` | **PASS** | Successfully acquired handles under `"Schedule:Constant"`/`"Schedule Value"`, applied OA > 25°C cooling override to 22°C, logged 606 events to `logs/phase2_actuator_events.csv`, 0 persistence failures. |
+| **Step 5: Energy Impact Proof** | `./.venv/bin/python run_baseline.py && ./venv/bin/python compare_results.py` | **PASS** | Proved deterministic energy increase: **+3.67% electricity (+28,219 kWh)** and **+7.76% natural gas (+4,686 kWh)** when override rules were applied. |
+
 ---
 
-## 5. Next Steps (Phase 2 Readiness)
-All baseline isolation, simulation, programmatic control, and local LLM tool-calling verification stop conditions have been met. The dev environment is verified and ready for control-loop and agent implementation in Phase 2.
+## 6. Next Steps (Phase 3 Readiness)
+All Phase 2 stop conditions (valid actuator handles, setpoint override persistence, and measurable energy delta) have been met and documented in `models/BUILDING_NOTES.md`. The environment and actuator infrastructure are verified and ready for Phase 3 (State monitoring, KPI establishment, and closed-loop data pipeline preparation).
