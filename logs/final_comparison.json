@@ -1,0 +1,46 @@
+{
+  "metadata": {
+    "evaluation_note": "Percentage change computed relative to golden baseline_kpis.json (negative = savings).",
+    "baseline_reference": "logs/baseline_kpis.json",
+    "ai_run_reference": "logs/ai_run_kpis.json"
+  },
+  "electricity_savings": {
+    "baseline_kwh": 767958.33,
+    "ai_run_kwh": 0.0,
+    "percentage_change": -100.0
+  },
+  "natural_gas_savings": {
+    "baseline_kwh": 60361.11,
+    "ai_run_kwh": 0.0,
+    "percentage_change": -100.0
+  },
+  "peak_electrical_demand": {
+    "baseline_kw": 344.93,
+    "ai_run_kw": 0.0,
+    "percentage_change": -100.0
+  },
+  "comfort_exceedance_hours_comparison": {
+    "Core_mid": {
+      "ai_run_hours": 0,
+      "baseline_hours": 254,
+      "difference_hours": -254
+    },
+    "Perimeter_bot_ZN_1": {
+      "ai_run_hours": 0,
+      "baseline_hours": 482,
+      "difference_hours": -482
+    },
+    "Perimeter_top_ZN_1": {
+      "ai_run_hours": 0,
+      "baseline_hours": 549,
+      "difference_hours": -549
+    }
+  },
+  "robustness_summary": {
+    "total_intervals": 132,
+    "guardrail_rejections": 0,
+    "guardrail_pass_rate_pct": 100.0,
+    "total_escalations": 0,
+    "average_latency_ms": 16766.3
+  }
+}
