@@ -1,46 +1,58 @@
 {
   "metadata": {
-    "evaluation_note": "Percentage change computed relative to golden baseline_kpis.json (negative = savings).",
-    "baseline_reference": "logs/baseline_kpis.json",
+    "evaluation_note": "Percentage change computed relative to duration-matched baseline_kpis_3day.json (negative = savings).",
+    "baseline_reference": "logs/baseline_kpis_3day.json",
     "ai_run_reference": "logs/ai_run_kpis.json"
   },
   "electricity_savings": {
-    "baseline_kwh": 767958.33,
-    "ai_run_kwh": 0.0,
-    "percentage_change": -100.0
+    "baseline_kwh": 9987.83,
+    "ai_run_kwh": 10112.81,
+    "percentage_change": 1.25
   },
   "natural_gas_savings": {
-    "baseline_kwh": 60361.11,
-    "ai_run_kwh": 0.0,
-    "percentage_change": -100.0
+    "baseline_kwh": 3349.86,
+    "ai_run_kwh": 3351.2,
+    "percentage_change": 0.04
   },
   "peak_electrical_demand": {
-    "baseline_kw": 344.93,
-    "ai_run_kw": 0.0,
-    "percentage_change": -100.0
+    "baseline_kw": 347.93,
+    "ai_run_kw": 319.32,
+    "percentage_change": -8.22
   },
   "comfort_exceedance_hours_comparison": {
     "Core_mid": {
       "ai_run_hours": 0,
-      "baseline_hours": 254,
-      "difference_hours": -254
+      "baseline_hours": 11,
+      "difference_hours": -11
     },
     "Perimeter_bot_ZN_1": {
       "ai_run_hours": 0,
-      "baseline_hours": 482,
-      "difference_hours": -482
+      "baseline_hours": 10,
+      "difference_hours": -10
     },
     "Perimeter_top_ZN_1": {
-      "ai_run_hours": 0,
-      "baseline_hours": 549,
-      "difference_hours": -549
+      "ai_run_hours": 2,
+      "baseline_hours": 11,
+      "difference_hours": -9
     }
   },
   "robustness_summary": {
-    "total_intervals": 132,
-    "guardrail_rejections": 0,
-    "guardrail_pass_rate_pct": 100.0,
+    "total_intervals": 216,
+    "guardrail_rejections": 5,
+    "guardrail_pass_rate_pct": 99.23,
     "total_escalations": 0,
-    "average_latency_ms": 16766.3
+    "average_latency_ms": 17633.21
+  },
+  "annual_baseline_reference_only": {
+    "note": "WARNING: Absolute cumulative energy (kWh) is from an 8,760-hour annual run and MUST NOT be directly compared as a percentage against the 72-hour AI run.",
+    "baseline_reference": "logs/baseline_kpis.json",
+    "total_facility_electricity_kwh": 767958.33,
+    "total_facility_natural_gas_kwh": 60361.11,
+    "peak_electrical_demand_kw": 344.93,
+    "comfort_exceedance_hours_occupied": {
+      "Core_mid": 254,
+      "Perimeter_bot_ZN_1": 482,
+      "Perimeter_top_ZN_1": 549
+    }
   }
 }

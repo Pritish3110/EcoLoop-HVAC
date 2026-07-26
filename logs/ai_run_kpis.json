@@ -1,19 +1,19 @@
 {
   "metadata": {
     "model": "models/actuator_ready.idf",
-    "run_period": "Feb 5 to Feb 11 (7 Days)",
+    "run_period": "Feb 5 to Feb 7 (3 Days)",
     "comfort_proxy": "Zone Mean Air Temperature outside 20.0-24.0 C during occupied hours (08:00-18:00)"
   },
-  "total_facility_electricity_kwh": 0.0,
-  "total_facility_natural_gas_kwh": 0.0,
-  "peak_electrical_demand_kw": 0.0,
-  "total_control_intervals_executed": 132,
-  "total_guardrail_rejections": 0,
+  "total_facility_electricity_kwh": 10112.81,
+  "total_facility_natural_gas_kwh": 3351.2,
+  "peak_electrical_demand_kw": 319.32,
+  "total_control_intervals_executed": 216,
+  "total_guardrail_rejections": 5,
   "total_escalations": 0,
-  "average_llm_latency_ms": 16766.3,
+  "average_llm_latency_ms": 17633.21,
   "comfort_exceedance_hours_occupied": {
     "Core_mid": 0,
     "Perimeter_bot_ZN_1": 0,
-    "Perimeter_top_ZN_1": 0
+    "Perimeter_top_ZN_1": 2
   }
 }

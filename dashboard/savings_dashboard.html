@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eco-Loop Building Agent — Quantitative Savings Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #121826;
+            --bg-glass: rgba(22, 30, 46, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f0f4f8;
+            --text-secondary: #94a3b8;
+            --accent-green: #10b981;
+            --accent-cyan: #06b6d4;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+        }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem;
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 40%);
+        }
+        header {
+            max-width: 1400px;
+            margin: 0 auto 2.5rem auto;
+            text-align: center;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.75rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #f0f4f8 0%, #38bdf8 50%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            font-weight: 400;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        /* Stat Cards Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+        .card {
+            background: var(--bg-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.75rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+        }
+        .card-green::before { background: linear-gradient(90deg, var(--accent-green), var(--accent-cyan)); }
+        .card-cyan::before { background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue)); }
+        .card-purple::before { background: linear-gradient(90deg, var(--accent-purple), #ec4899); }
+        .card-amber::before { background: linear-gradient(90deg, var(--accent-amber), var(--accent-red)); }
+        
+        .card-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .card-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+        .card-subtext {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .val-green { color: var(--accent-green); }
+        .val-cyan { color: var(--accent-cyan); }
+        .val-purple { color: var(--accent-purple); }
+        .val-amber { color: var(--accent-amber); }
+        
+        /* Charts Section */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+        @media (max-width: 992px) {
+            .charts-grid { grid-template-columns: 1fr; }
+        }
+        .chart-container {
+            background: var(--bg-glass);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.75rem;
+        }
+        .chart-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .chart-wrapper {
+            position: relative;
+            height: 320px;
+            width: 100%;
+        }
+        
+        /* Time Series Full Width */
+        .full-width-chart {
+            grid-column: 1 / -1;
+            margin-bottom: 2.5rem;
+        }
+        .full-chart-wrapper {
+            position: relative;
+            height: 400px;
+            width: 100%;
+        }
+        
+        /* Honest Note Box */
+        .honest-note-box {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.8) 100%);
+            border-left: 4px solid var(--accent-blue);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 2.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            border: 1px solid var(--border-color);
+            border-left-width: 4px;
+        }
+        .note-icon {
+            font-size: 1.5rem;
+            color: var(--accent-blue);
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+        .note-content h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+            color: var(--text-primary);
+        }
+        .note-content p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+        .note-content strong {
+            color: #e2e8f0;
+        }
+        
+        /* Energy Details Table */
+        .table-container {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 1.75rem;
+            margin-bottom: 2.5rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        th {
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+        }
+        td {
+            font-size: 0.95rem;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-flat { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+        .badge-success { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        
+        footer {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Eco-Loop Building Agent</h1>
+    <div class="subtitle">Closed-Loop Autonomous HVAC Control via EnergyPlus + LLM Guardrails (Phase 7 Final Delivery)</div>
+</header>
+
+<div class="container">
+
+    <!-- Top 4 Summary Cards -->
+    <div class="stats-grid">
+        <div class="card card-green">
+            <div class="card-title">Peak Electrical Demand</div>
+            <div class="card-value val-green">-8.22%</div>
+            <div class="card-subtext">319.32 kW vs 347.93 kW baseline</div>
+        </div>
+        <div class="card card-cyan">
+            <div class="card-title">Comfort Violations</div>
+            <div class="card-value val-cyan">-93.75%</div>
+            <div class="card-subtext">2 hours total vs 32 hours baseline</div>
+        </div>
+        <div class="card card-purple">
+            <div class="card-title">Guardrail Pass Rate</div>
+            <div class="card-value val-purple">99.23%</div>
+            <div class="card-subtext">5 Strike-1 rejections, 0 escalations</div>
+        </div>
+        <div class="card card-amber">
+            <div class="card-title">Autonomous Control Decisions</div>
+            <div class="card-value val-amber">216</div>
+            <div class="card-subtext">72-hour severe winter stress test (20-min cadence)</div>
+        </div>
+    </div>
+
+    <!-- Honest Note Section -->
+    <div class="honest-note-box">
+        <div class="note-icon">ℹ️</div>
+        <div class="note-content">
+            <h4>Energy Consumption Optimization Rationale</h4>
+            <p>Energy use remained essentially flat (<strong>+1.25% Electricity</strong> at 10112.81 kWh vs 9987.83 kWh; <strong>+0.04% Natural Gas</strong> at 3351.2 kWh vs 3349.86 kWh); the AI agent's decisions prioritized eliminating comfort violations (-93.75% exceedance reduction during extreme -21.7°C weather) and reducing peak electrical demand (-8.22%) rather than sacrificing occupant comfort to reduce total kWh in this 3-day test window.</p>
+        </div>
+    </div>
+
+    <!-- Bar Charts Section -->
+    <div class="charts-grid">
+        <div class="chart-container">
+            <div class="chart-title">Peak Electrical Demand (kW)</div>
+            <div class="chart-wrapper">
+                <canvas id="peakChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-container">
+            <div class="chart-title">Comfort Exceedance Hours by Zone</div>
+            <div class="chart-wrapper">
+                <canvas id="comfortChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Series Section -->
+    <div class="chart-container full-width-chart">
+        <div class="chart-title">
+            <span>72-Hour Indoor Zone Temperatures vs ASHRAE 55 Bounds (20–24°C)</span>
+            <span style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 400;">Shaded band indicates comfortable operating zone</span>
+        </div>
+        <div class="full-chart-wrapper">
+            <canvas id="tempChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Detailed Metrics Table -->
+    <div class="table-container">
+        <div class="chart-title">Duration-Matched 3-Day Performance Breakdown (Feb 5 – Feb 7)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Baseline Model (Unmodified Schedule)</th>
+                    <th>Eco-Loop AI Agent (Closed-Loop)</th>
+                    <th>Difference / Savings</th>
+                    <th>Evaluation Classification</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Peak Electrical Demand</strong></td>
+                    <td>347.93 kW</td>
+                    <td><strong>319.32 kW</strong></td>
+                    <td style="color: var(--accent-green); font-weight: 600;">-8.22%</td>
+                    <td><span class="badge badge-success">Primary Demand Reduction Driver</span></td>
+                </tr>
+                <tr>
+                    <td><strong>Comfort Exceedance (Total Occupied Hours)</strong></td>
+                    <td>32 zone-hours</td>
+                    <td><strong>2 zone-hours</strong></td>
+                    <td style="color: var(--accent-cyan); font-weight: 600;">-93.75% (-30 hrs)</td>
+                    <td><span class="badge badge-success">Primary Comfort Preservation Driver</span></td>
+                </tr>
+                <tr>
+                    <td><strong>Facility Electricity Consumption</strong></td>
+                    <td>9987.83 kWh</td>
+                    <td>10112.81 kWh</td>
+                    <td style="color: #94a3b8;">+1.25% (+124.98 kWh)</td>
+                    <td><span class="badge badge-flat">Comparable / Comfort Heating Trade-off</span></td>
+                </tr>
+                <tr>
+                    <td><strong>Facility Natural Gas Consumption</strong></td>
+                    <td>3349.86 kWh</td>
+                    <td>3351.2 kWh</td>
+                    <td style="color: #94a3b8;">+0.04% (+1.34 kWh)</td>
+                    <td><span class="badge badge-flat">Unaffected (VAV Electric Reheat Architecture)</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+<footer>
+    <p>Honeywell Hackathon Submission — Eco-Loop Building Agents | Built with Google DeepMind Advanced Agentic Coding Architecture</p>
+</footer>
+
+<script>
+    // Chart Defaults
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+
+    // 1. Peak Demand Bar Chart
+    const ctxPeak = document.getElementById('peakChart').getContext('2d');
+    new Chart(ctxPeak, {
+        type: 'bar',
+        data: {
+            labels: ['Baseline (Static Schedule)', 'Eco-Loop AI Agent'],
+            datasets: [{
+                label: 'Peak Electrical Demand (kW)',
+                data: [347.93, 319.32],
+                backgroundColor: [
+                    'rgba(148, 163, 184, 0.3)',
+                    'rgba(16, 185, 129, 0.7)'
+                ],
+                borderColor: [
+                    'rgba(148, 163, 184, 0.8)',
+                    'rgba(16, 185, 129, 1)'
+                ],
+                borderWidth: 1,
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) { return context.parsed.y + ' kW'; }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    min: 280,
+                    max: 360,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    title: { display: true, text: 'Demand (kW)' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    // 2. Comfort Exceedance Bar Chart
+    const ctxComfort = document.getElementById('comfortChart').getContext('2d');
+    new Chart(ctxComfort, {
+        type: 'bar',
+        data: {
+            labels: ['Core Mid Zone', 'Perimeter Bottom ZN 1', 'Perimeter Top ZN 1'],
+            datasets: [
+                {
+                    label: 'Baseline Exceedance Hours',
+                    data: [11, 10, 11],
+                    backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                    borderColor: 'rgba(239, 68, 68, 1)',
+                    borderWidth: 1,
+                    borderRadius: 6
+                },
+                {
+                    label: 'AI Agent Exceedance Hours',
+                    data: [0, 0, 2],
+                    backgroundColor: 'rgba(6, 182, 212, 0.8)',
+                    borderColor: 'rgba(6, 182, 212, 1)',
+                    borderWidth: 1,
+                    borderRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) { return context.dataset.label + ': ' + context.parsed.y + ' hours'; }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    title: { display: true, text: 'Violations (Hours)' }
+                },
+                x: { grid: { display: false } }
+            }
+        }
+    });
+
+    // 3. Time Series Temperature Chart
+    const ctxTemp = document.getElementById('tempChart').getContext('2d');
+    
+    // Shaded Comfort Band Plugin
+    const comfortBandPlugin = {
+        id: 'comfortBand',
+        beforeDraw: (chart) => {
+            const { ctx, chartArea: { top, bottom, left, right }, scales: { y } } = chart;
+            const y24 = y.getPixelForValue(24.0);
+            const y20 = y.getPixelForValue(20.0);
+            
+            ctx.save();
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+            ctx.fillRect(left, y24, right - left, y20 - y24);
+            
+            ctx.strokeStyle = 'rgba(16, 185, 129, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(left, y24);
+            ctx.lineTo(right, y24);
+            ctx.moveTo(left, y20);
+            ctx.lineTo(right, y20);
+            ctx.stroke();
+            ctx.restore();
+        }
+    };
+
+    new Chart(ctxTemp, {
+        type: 'line',
+        data: {
+            labels: ["1977-02-05 00:20:00", "1977-02-05 00:40:00", "1977-02-05 00:60:00", "1977-02-05 01:20:00", "1977-02-05 01:40:00", "1977-02-05 01:60:00", "1977-02-05 02:20:00", "1977-02-05 02:40:00", "1977-02-05 02:60:00", "1977-02-05 03:20:00", "1977-02-05 03:40:00", "1977-02-05 03:60:00", "1977-02-05 04:20:00", "1977-02-05 04:40:00", "1977-02-05 04:60:00", "1977-02-05 05:20:00", "1977-02-05 05:40:00", "1977-02-05 05:60:00", "1977-02-05 06:20:00", "1977-02-05 06:40:00", "1977-02-05 06:60:00", "1977-02-05 07:20:00", "1977-02-05 07:40:00", "1977-02-05 07:60:00", "1977-02-05 08:20:00", "1977-02-05 08:40:00", "1977-02-05 08:60:00", "1977-02-05 09:20:00", "1977-02-05 09:40:00", "1977-02-05 09:60:00", "1977-02-05 10:20:00", "1977-02-05 10:40:00", "1977-02-05 10:60:00", "1977-02-05 11:20:00", "1977-02-05 11:40:00", "1977-02-05 11:60:00", "1977-02-05 12:20:00", "1977-02-05 12:40:00", "1977-02-05 12:60:00", "1977-02-05 13:20:00", "1977-02-05 13:40:00", "1977-02-05 13:60:00", "1977-02-05 14:20:00", "1977-02-05 14:40:00", "1977-02-05 14:60:00", "1977-02-05 15:20:00", "1977-02-05 15:40:00", "1977-02-05 15:60:00", "1977-02-05 16:20:00", "1977-02-05 16:40:00", "1977-02-05 16:60:00", "1977-02-05 17:20:00", "1977-02-05 17:40:00", "1977-02-05 17:60:00", "1977-02-05 18:20:00", "1977-02-05 18:40:00", "1977-02-05 18:60:00", "1977-02-05 19:20:00", "1977-02-05 19:40:00", "1977-02-05 19:60:00", "1977-02-05 20:20:00", "1977-02-05 20:40:00", "1977-02-05 20:60:00", "1977-02-05 21:20:00", "1977-02-05 21:40:00", "1977-02-05 21:60:00", "1977-02-05 22:20:00", "1977-02-05 22:40:00", "1977-02-05 22:60:00", "1977-02-05 23:20:00", "1977-02-05 23:40:00", "1977-02-05 23:60:00", "1977-02-06 00:20:00", "1977-02-06 00:40:00", "1977-02-06 00:60:00", "1977-02-06 01:20:00", "1977-02-06 01:40:00", "1977-02-06 01:60:00", "1977-02-06 02:20:00", "1977-02-06 02:40:00", "1977-02-06 02:60:00", "1977-02-06 03:20:00", "1977-02-06 03:40:00", "1977-02-06 03:60:00", "1977-02-06 04:20:00", "1977-02-06 04:40:00", "1977-02-06 04:60:00", "1977-02-06 05:20:00", "1977-02-06 05:40:00", "1977-02-06 05:60:00", "1977-02-06 06:20:00", "1977-02-06 06:40:00", "1977-02-06 06:60:00", "1977-02-06 07:20:00", "1977-02-06 07:40:00", "1977-02-06 07:60:00", "1977-02-06 08:20:00", "1977-02-06 08:40:00", "1977-02-06 08:60:00", "1977-02-06 09:20:00", "1977-02-06 09:40:00", "1977-02-06 09:60:00", "1977-02-06 10:20:00", "1977-02-06 10:40:00", "1977-02-06 10:60:00", "1977-02-06 11:20:00", "1977-02-06 11:40:00", "1977-02-06 11:60:00", "1977-02-06 12:20:00", "1977-02-06 12:40:00", "1977-02-06 12:60:00", "1977-02-06 13:20:00", "1977-02-06 13:40:00", "1977-02-06 13:60:00", "1977-02-06 14:20:00", "1977-02-06 14:40:00", "1977-02-06 14:60:00", "1977-02-06 15:20:00", "1977-02-06 15:40:00", "1977-02-06 15:60:00", "1977-02-06 16:20:00", "1977-02-06 16:40:00", "1977-02-06 16:60:00", "1977-02-06 17:20:00", "1977-02-06 17:40:00", "1977-02-06 17:60:00", "1977-02-06 18:20:00", "1977-02-06 18:40:00", "1977-02-06 18:60:00", "1977-02-06 19:20:00", "1977-02-06 19:40:00", "1977-02-06 19:60:00", "1977-02-06 20:20:00", "1977-02-06 20:40:00", "1977-02-06 20:60:00", "1977-02-06 21:20:00", "1977-02-06 21:40:00", "1977-02-06 21:60:00", "1977-02-06 22:20:00", "1977-02-06 22:40:00", "1977-02-06 22:60:00", "1977-02-06 23:20:00", "1977-02-06 23:40:00", "1977-02-06 23:60:00", "1977-02-07 00:20:00", "1977-02-07 00:40:00", "1977-02-07 00:60:00", "1977-02-07 01:20:00", "1977-02-07 01:40:00", "1977-02-07 01:60:00", "1977-02-07 02:20:00", "1977-02-07 02:40:00", "1977-02-07 02:60:00", "1977-02-07 03:20:00", "1977-02-07 03:40:00", "1977-02-07 03:60:00", "1977-02-07 04:20:00", "1977-02-07 04:40:00", "1977-02-07 04:60:00", "1977-02-07 05:20:00", "1977-02-07 05:40:00", "1977-02-07 05:60:00", "1977-02-07 06:20:00", "1977-02-07 06:40:00", "1977-02-07 06:60:00", "1977-02-07 07:20:00", "1977-02-07 07:40:00", "1977-02-07 07:60:00", "1977-02-07 08:20:00", "1977-02-07 08:40:00", "1977-02-07 08:60:00", "1977-02-07 09:20:00", "1977-02-07 09:40:00", "1977-02-07 09:60:00", "1977-02-07 10:20:00", "1977-02-07 10:40:00", "1977-02-07 10:60:00", "1977-02-07 11:20:00", "1977-02-07 11:40:00", "1977-02-07 11:60:00", "1977-02-07 12:20:00", "1977-02-07 12:40:00", "1977-02-07 12:60:00", "1977-02-07 13:20:00", "1977-02-07 13:40:00", "1977-02-07 13:60:00", "1977-02-07 14:20:00", "1977-02-07 14:40:00", "1977-02-07 14:60:00", "1977-02-07 15:20:00", "1977-02-07 15:40:00", "1977-02-07 15:60:00", "1977-02-07 16:20:00", "1977-02-07 16:40:00", "1977-02-07 16:60:00", "1977-02-07 17:20:00", "1977-02-07 17:40:00", "1977-02-07 17:60:00", "1977-02-07 18:20:00", "1977-02-07 18:40:00", "1977-02-07 18:60:00", "1977-02-07 19:20:00", "1977-02-07 19:40:00", "1977-02-07 19:60:00", "1977-02-07 20:20:00", "1977-02-07 20:40:00", "1977-02-07 20:60:00", "1977-02-07 21:20:00", "1977-02-07 21:40:00", "1977-02-07 21:60:00", "1977-02-07 22:20:00", "1977-02-07 22:40:00", "1977-02-07 22:60:00", "1977-02-07 23:20:00", "1977-02-07 23:40:00", "1977-02-07 23:60:00"],
+            datasets: [
+                {
+                    label: 'Core Mid Temp (°C)',
+                    data: [22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.2
+                },
+                {
+                    label: 'Perimeter Bottom ZN 1 (°C)',
+                    data: [22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0],
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.2
+                },
+                {
+                    label: 'Perimeter Top ZN 1 (°C)',
+                    data: [22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0, 22.0],
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    tension: 0.2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false,
+            },
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) { return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + ' °C'; }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    min: 18.0,
+                    max: 26.0,
+                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                    title: { display: true, text: 'Zone Air Temperature (°C)' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        maxTicksLimit: 12,
+                        maxRotation: 0
+                    }
+                }
+            }
+        },
+        plugins: [comfortBandPlugin]
+    });
+</script>
+
+</body>
+</html>

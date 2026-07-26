@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "model": "models/baseline_3day.idf",
+    "run_period": "Feb 5 to Feb 7 (3 Days / 72 Hours)",
+    "comfort_proxy": "Zone Mean Air Temperature outside 20.0-24.0 C during occupied hours (08:00-18:00)"
+  },
+  "total_facility_electricity_kwh": 9987.83,
+  "total_facility_natural_gas_kwh": 3349.86,
+  "peak_electrical_demand_kw": 347.93,
+  "comfort_exceedance_hours_occupied": {
+    "Core_mid": 11,
+    "Perimeter_bot_ZN_1": 10,
+    "Perimeter_top_ZN_1": 11
+  }
+}

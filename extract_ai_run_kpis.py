@@ -13,27 +13,50 @@ import sqlite3
 
 def get_utility_kwh(conn):
     cur = conn.cursor()
-    query = """
-    SELECT ColumnName, Value 
-    FROM TabularDataWithStrings 
-    WHERE ReportName='AnnualBuildingUtilityPerformanceSummary' 
-      AND TableName='End Uses'
-      AND RowName='Total End Uses';
+    query_ts = """
+    SELECT rdd.Name, SUM(rd.Value)
+    FROM ReportData rd
+    JOIN ReportDataDictionary rdd ON rd.ReportDataDictionaryIndex = rdd.ReportDataDictionaryIndex
+    WHERE rdd.Name IN ('Electricity:Facility', 'NaturalGas:Facility', 'Gas:Facility')
+      AND rdd.ReportingFrequency = 'Hourly'
+    GROUP BY rdd.Name;
     """
-    cur.execute(query)
-    rows = cur.fetchall()
-    gj_to_kwh = 277.77777777778
     elec_kwh = 0.0
     gas_kwh = 0.0
-    for col, val in rows:
-        try:
-            v = float(val)
-        except ValueError:
-            v = 0.0
-        if col == "Electricity":
-            elec_kwh = v * gj_to_kwh
-        elif col == "Natural Gas":
-            gas_kwh = v * gj_to_kwh
+    try:
+        cur.execute(query_ts)
+        ts_rows = cur.fetchall()
+        for name, val in ts_rows:
+            v = float(val) / 3600000.0  # J to kWh
+            if name == 'Electricity:Facility':
+                elec_kwh = v
+            elif name in ('NaturalGas:Facility', 'Gas:Facility'):
+                gas_kwh = v
+    except sqlite3.Error as e:
+        print(f"[extract_ai_run_kpis] Time-series utility error: {e}")
+
+    # Fallback to summary table if time series was empty
+    if elec_kwh == 0.0 or gas_kwh == 0.0:
+        query = """
+        SELECT ColumnName, Value 
+        FROM TabularDataWithStrings 
+        WHERE ReportName='AnnualBuildingUtilityPerformanceSummary' 
+          AND TableName='End Uses'
+          AND RowName='Total End Uses';
+        """
+        cur.execute(query)
+        rows = cur.fetchall()
+        gj_to_kwh = 277.77777777778
+        for col, val in rows:
+            try:
+                v = float(val)
+            except ValueError:
+                v = 0.0
+            if col == "Electricity" and elec_kwh == 0.0:
+                elec_kwh = v * gj_to_kwh
+            elif col == "Natural Gas" and gas_kwh == 0.0:
+                gas_kwh = v * gj_to_kwh
+
     return round(elec_kwh, 2), round(gas_kwh, 2)
 
 def get_peak_demand_kw(conn):
@@ -144,13 +167,17 @@ def analyze_control_log(csv_path):
 def main():
     sql_path = "models/actuator_out/eplusout.sql"
     csv_path = "logs/phase6_control_log.csv"
-    base_json = "logs/baseline_kpis.json"
+    base_json_3day = "logs/baseline_kpis_3day.json"
+    base_json_annual = "logs/baseline_kpis.json"
 
     if not os.path.exists(sql_path):
         print(f"FATAL: {sql_path} does not exist yet! Ensure simulation completed.")
         sys.exit(1)
-    if not os.path.exists(base_json):
-        print(f"FATAL: {base_json} does not exist!")
+    if not os.path.exists(base_json_3day):
+        print(f"FATAL: {base_json_3day} does not exist! Run extract_baseline_3day_kpis.py first.")
+        sys.exit(1)
+    if not os.path.exists(base_json_annual):
+        print(f"FATAL: {base_json_annual} does not exist!")
         sys.exit(1)
 
     conn = sqlite3.connect(sql_path)
@@ -166,7 +193,7 @@ def main():
     ai_kpis = {
         "metadata": {
             "model": "models/actuator_ready.idf",
-            "run_period": "Feb 5 to Feb 11 (7 Days)",
+            "run_period": "Feb 5 to Feb 7 (3 Days)",
             "comfort_proxy": "Zone Mean Air Temperature outside 20.0-24.0 C during occupied hours (08:00-18:00)"
         },
         "total_facility_electricity_kwh": elec_kwh,
@@ -188,8 +215,8 @@ def main():
     print("==========================================================")
     print(json.dumps(ai_kpis, indent=2))
 
-    # Compute Comparison against Baseline
-    with open(base_json, "r") as f:
+    # Compute Comparison against 3-Day Duration-Matched Baseline
+    with open(base_json_3day, "r") as f:
         base_kpis = json.load(f)
 
     b_elec = base_kpis.get("total_facility_electricity_kwh", 0.01)
@@ -211,10 +238,23 @@ def main():
             "difference_hours": c_ai - c_base
         }
 
+    # Load Annual Baseline for Context
+    with open(base_json_annual, "r") as f:
+        base_kpis_ann = json.load(f)
+
+    annual_reference_only = {
+        "note": "WARNING: Absolute cumulative energy (kWh) is from an 8,760-hour annual run and MUST NOT be directly compared as a percentage against the 72-hour AI run.",
+        "baseline_reference": "logs/baseline_kpis.json",
+        "total_facility_electricity_kwh": base_kpis_ann.get("total_facility_electricity_kwh"),
+        "total_facility_natural_gas_kwh": base_kpis_ann.get("total_facility_natural_gas_kwh"),
+        "peak_electrical_demand_kw": base_kpis_ann.get("peak_electrical_demand_kw"),
+        "comfort_exceedance_hours_occupied": base_kpis_ann.get("comfort_exceedance_hours_occupied")
+    }
+
     comparison = {
         "metadata": {
-            "evaluation_note": "Percentage change computed relative to golden baseline_kpis.json (negative = savings).",
-            "baseline_reference": "logs/baseline_kpis.json",
+            "evaluation_note": "Percentage change computed relative to duration-matched baseline_kpis_3day.json (negative = savings).",
+            "baseline_reference": "logs/baseline_kpis_3day.json",
             "ai_run_reference": "logs/ai_run_kpis.json"
         },
         "electricity_savings": {
@@ -239,7 +279,8 @@ def main():
             "guardrail_pass_rate_pct": round(((intervals * 3 - rejections) / (intervals * 3)) * 100.0, 2) if intervals > 0 else 0.0,
             "total_escalations": escalations,
             "average_latency_ms": avg_lat
-        }
+        },
+        "annual_baseline_reference_only": annual_reference_only
     }
 
     with open("logs/final_comparison.json", "w") as f:

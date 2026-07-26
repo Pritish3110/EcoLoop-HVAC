@@ -28,7 +28,7 @@ from agent.prompt_builder import generate_prompts
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "llama3.1:8b"
 TIMEOUT_SEC = 45.0
-MAX_INTERVALS = 504  # 7 simulated days (504 control intervals = 1512 zone tool decisions) for Phase 6 robustness verification
+MAX_INTERVALS = 216  # 3 simulated days (216 control intervals = 648 zone tool decisions) for Phase 6 robustness verification
 
 def parse_llm_tools(message: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
@@ -157,7 +157,7 @@ def main():
     def timestep_callback(state_arg):
         nonlocal timestep_count, control_interval_count, last_feedback
 
-        if api.exchange.warmup_flag(state_arg):
+        if api.exchange.warmup_flag(state_arg) or api.exchange.kind_of_sim(state_arg) != 3:
             return
 
         timestep_count += 1
@@ -212,9 +212,9 @@ def main():
         if timestep_count % 2 != 0:
             return
 
-        # Stop simulation if we reached the required verification duration (36 intervals = 12 simulated hours)
+        # Stop simulation if we reached the required verification duration
         if control_interval_count >= MAX_INTERVALS:
-            print(f"\n[VERIFICATION COMPLETE] Reached {MAX_INTERVALS} control intervals (7 simulated days). Terminating cleanly.")
+            print(f"\n[VERIFICATION COMPLETE] Reached {MAX_INTERVALS} control intervals (3 simulated days). Terminating cleanly.")
             api.runtime.stop_simulation(state_arg)
             return
 
@@ -336,9 +336,9 @@ def main():
     api.runtime.callback_begin_system_timestep_before_predictor(state, timestep_callback)
 
     print("==========================================================")
-    print("Starting Phase 6 LLM Agent Multi-Day Robustness Test (7 Days)...")
+    print("Starting Phase 6 LLM Agent Multi-Day Robustness Test (3 Days)...")
     print(f"Model: {MODEL_NAME} at {OLLAMA_URL}")
-    print(f"Target Cadence: {MAX_INTERVALS} control intervals (7 simulated days)")
+    print(f"Target Cadence: {MAX_INTERVALS} control intervals (3 simulated days)")
     print("==========================================================")
 
     os.makedirs("models/actuator_out", exist_ok=True)

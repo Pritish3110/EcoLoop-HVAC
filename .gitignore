@@ -15,6 +15,7 @@ eplus*
 *.csv
 *.htm
 *.html
+!dashboard/*.html
 *.tab
 *.txt
 *.imf
